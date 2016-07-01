@@ -55,9 +55,18 @@ class Key(object):
         self.key = key
         self.commands = commands
         self.desc = kwds.get("desc", "")
-        if key not in xcbq.keysyms:
-            raise utils.QtileError("Unknown key: %s" % key)
-        self.keysym = xcbq.keysyms[key]
+
+        # else if it is a hex code string, it represents the keycode directly
+        if key in xcbq.keysyms:
+            self.keysym = xcbq.keysyms[key]
+            self.keycode = None
+        else:
+            try:
+                self.keycode = int(key[1:])
+                self.keysym = None
+            except ValueError:
+                raise utils.QtileError("Unknown keysym or unparsable keycode (#XX): %s" % key)
+
         try:
             self.modmask = utils.translate_masks(self.modifiers)
         except KeyError as v:
@@ -137,8 +146,6 @@ class EzConfig(object):
         keys = []
 
         for key in spec.split('-'):
-            if not key:
-                break
             if key in self.modifier_keys:
                 if keys:
                     msg = 'Modifiers must always come before key/btn: %s'

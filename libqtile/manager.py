@@ -399,9 +399,15 @@ class Qtile(command.CommandObject):
             )
             self.screens.append(s)
 
+    def get_key_code(self, key):
+        if key.keycode:
+            return key.keycode
+        else:
+            return self.conn.keysym_to_keycode(key.keysym)
+
     def mapKey(self, key):
-        self.keyMap[(key.keysym, key.modmask & self.validMask)] = key
-        code = self.conn.keysym_to_keycode(key.keysym)
+        code = self.get_key_code(key)
+        self.keyMap[(code, key.modmask & self.validMask)] = key
         self.root.grab_key(
             code,
             key.modmask,
@@ -426,11 +432,11 @@ class Qtile(command.CommandObject):
             )
 
     def unmapKey(self, key):
-        key_index = (key.keysym, key.modmask & self.validMask)
+        code = self.get_key_code(key)
+        key_index = (code, key.modmask & self.validMask)
         if key_index not in self.keyMap:
             return
 
-        code = self.conn.keysym_to_keycode(key.keysym)
         self.root.ungrab_key(code, key.modmask)
         if self.numlockMask:
             self.root.ungrab_key(code, key.modmask | self.numlockMask)
@@ -893,13 +899,13 @@ class Qtile(command.CommandObject):
                 logger.info("Invalid Desktop Index: %s" % index)
 
     def handle_KeyPress(self, e):
-        keysym = self.conn.code_to_syms[e.detail][0]
+        code = e.detail
         state = e.state
         if self.numlockMask:
             state = e.state | self.numlockMask
-        k = self.keyMap.get((keysym, state & self.validMask))
+        k = self.keyMap.get((code, state & self.validMask))
         if not k:
-            logger.info("Ignoring unknown keysym: %s" % keysym)
+            logger.info("Ignoring unknown keycode: %s" % code)
             return
         for i in k.commands:
             if i.check(self):
@@ -1255,10 +1261,12 @@ class Qtile(command.CommandObject):
         result.add(["KeySym", "Mod", "Command", "Desc"])
         result.add([])
         rows = []
-        for (ks, kmm), k in self.keyMap.items():
+        for (keycode, kmm), k in self.keyMap.items():
             if k.commands:
                 continue
-            name = ", ".join(xcbq.rkeysyms.get(ks, ("<unknown>", )))
+
+            keysym = self.conn.keycode_to_keysym(keycode, kmm)
+            name = ", ".join(xcbq.rkeysyms.get(keysym, ("<unknown>", )))
             modifiers = ", ".join(utils.translate_modifiers(kmm))
             allargs = ", ".join([repr(value) for value in k.commands[0].args] + ["%s = %s" % (keyword, repr(value)) for keyword, value in k.commands[0].kwargs.items()])
             rows.append((name, str(modifiers), "{0:s}({1:s})".format(k.commands[0].name, allargs), k.desc))
